@@ -1,1 +1,1813 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NOC Live Outages</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23ff3b30'/%3E%3Ctext x='50' y='68' font-size='50' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'%3EN%3C/text%3E%3C/svg%3E">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+  <style>
+    :root {
+      --ios-blue: #007aff; --ios-green: #34c759; --ios-red: #ff3b30; --ios-orange: #ff9500; --ios-gray: #8e8e93;
+      --text-main: #fff; --text-sec: rgba(255,255,255,0.6); --text-tert: rgba(255,255,255,0.35);
+      --bg: #0a0a0c; --surface: rgba(30,30,35,0.6); --surface-strong: rgba(40,40,45,0.85);
+      --separator: rgba(255,255,255,0.1);
+      --glass-shadow: 0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05);
+      --shadow-modal: 0 24px 64px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.1);
+      --r-sm: 8px; --r-md: 14px; --r-lg: 20px; --r-pill: 999px;
+    }
+    [data-theme="light"] {
+      --text-main: #1c1c1e; --text-sec: #6e6e73; --text-tert: #aeaeb2;
+      --bg: #f2f2f7; --surface: rgba(255,255,255,0.7); --surface-strong: #ffffff;
+      --separator: rgba(0,0,0,0.1);
+      --glass-shadow: 0 8px 32px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,1);
+      --shadow-modal: 0 24px 64px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,1);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg); color: var(--text-main); min-height: 100vh;
+      padding-bottom: 20px; isolation: isolate; transition: background 0.3s, color 0.3s;
+      background-image: 
+        radial-gradient(1000px 600px at 10% -10%, rgba(255,59,48,0.05), transparent 60%),
+        radial-gradient(800px 600px at 90% 110%, rgba(0,122,255,0.05), transparent 60%);
+      background-attachment: fixed;
+    }
+    body.fullscreen-mode .toolbar,
+    body.fullscreen-mode .header-right #auth-area,
+    body.fullscreen-mode .header-right #refresh-btn,
+    body.fullscreen-mode .header-right #theme-btn { display: none !important; }
+    body.fullscreen-mode { cursor: default; }
+    .header {
+      position: sticky; top: 0; z-index: 30; display: flex; justify-content: space-between;
+      align-items: center; padding: 12px 24px; background: var(--surface-strong);
+      backdrop-filter: blur(20px); border-bottom: 1px solid var(--separator); margin-bottom: 20px;
+      transition: padding 0.3s, margin 0.3s;
+    }
+    body.fullscreen-mode .header { padding: 8px 24px; margin-bottom: 10px; }
+    .header h1 { font-size: 1.2rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .header-right { display: flex; align-items: center; gap: 8px; }
+    .container { max-width: 1600px; margin: 0 auto; padding: 0 20px; }
+    body.fullscreen-mode .container { max-width: 100%; }
+    .btn {
+      padding: 8px 16px; border-radius: var(--r-pill); border: none; font-weight: 600; font-size: 0.85rem;
+      cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn:active { transform: scale(0.96); }
+    .btn-primary { background: var(--ios-blue); color: #fff; }
+    .btn-secondary { background: var(--surface-strong); color: var(--text-main); border: 1px solid var(--separator); }
+    .btn-sm { padding: 5px 10px; font-size: 0.75rem; }
+    .badge { padding: 4px 10px; border-radius: var(--r-pill); font-size: 0.75rem; font-weight: 600; }
+    .toolbar {
+      display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; background: var(--surface);
+      padding: 16px; border-radius: var(--r-md); border: 1px solid var(--separator); align-items: center;
+    }
+    .input-group { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 140px; }
+    .input-group label { font-size: 0.75rem; color: var(--text-sec); font-weight: 600; text-transform: uppercase; }
+    .input-group input, .input-group select {
+      padding: 8px 12px; border-radius: var(--r-sm); border: 1px solid var(--separator);
+      background: rgba(0,0,0,0.1); color: var(--text-main); font-family: inherit; font-size: 0.9rem;
+    }
+    .input-group input:focus, .input-group select:focus { outline: none; border-color: var(--ios-blue); }
+    .view-tabs { display: flex; gap: 8px; margin-bottom: 20px; background: var(--surface); padding: 4px; border-radius: var(--r-md); width: fit-content; border: 1px solid var(--separator); }
+    .v-tab { padding: 8px 24px; border-radius: var(--r-sm); font-weight: 600; font-size: 0.9rem; color: var(--text-sec); cursor: pointer; transition: 0.2s; }
+    .v-tab.active { background: var(--surface-strong); color: var(--text-main); box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    .view-container { display: none; animation: fadeIn 0.3s ease; }
+    .view-container.active { display: block; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    .card { background: var(--surface); backdrop-filter: blur(20px); border: 1px solid var(--separator); border-radius: var(--r-lg); padding: 20px; margin-bottom: 20px; box-shadow: var(--glass-shadow); }
+    .card-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 20px; }
+    .kpi { padding: 16px; border-radius: var(--r-md); background: var(--surface-strong); border: 1px solid var(--separator); cursor: pointer; transition: 0.2s; position: relative; overflow: hidden; }
+    .kpi:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .kpi.active-filter { border-color: var(--ios-blue); box-shadow: 0 0 0 2px var(--ios-blue); }
+    .kpi-label { font-size: 0.75rem; color: var(--text-sec); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .kpi-val { font-size: 2rem; font-weight: 800; margin-top: 4px; }
+    .kpi-sub { font-size: 0.75rem; color: var(--text-sec); margin-top: 4px; }
+
+    /* Table */
+    .table-wrap { overflow-x: auto; border-radius: var(--r-md); border: 1px solid var(--separator); }
+    .table { width: 100%; border-collapse: collapse; min-width: 1200px; }
+    .table th { background: rgba(0,0,0,0.05); padding: 10px 14px; text-align: left; font-size: 0.75rem; color: var(--text-sec); font-weight: 600; text-transform: uppercase; border-bottom: 1px solid var(--separator); }
+    .table td { padding: 10px 14px; border-bottom: 1px solid var(--separator); font-size: 0.85rem; }
+    .table tr:last-child td { border-bottom: none; }
+    .table tr:hover { background: rgba(0,0,0,0.02); }
+    [data-theme="dark"] .table th { background: rgba(255,255,255,0.03); }
+    [data-theme="dark"] .table tr:hover { background: rgba(255,255,255,0.02); }
+    body.fullscreen-mode .table th { font-size: 0.9rem; padding: 12px 16px; }
+    body.fullscreen-mode .table td { font-size: 1rem; padding: 12px 16px; }
+
+    /* ✅ LIVE BOARD SCROLL — Show 7 rows max */
+    #view-live .table-wrap {
+      max-height: calc(7 * 62px + 45px); 
+      overflow-y: auto;
+      overflow-x: auto;
+    }
+    #view-live .table thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: var(--surface-strong);
+      backdrop-filter: blur(10px);
+    }
+    #view-live .table-wrap::-webkit-scrollbar { width: 8px; height: 8px; }
+    #view-live .table-wrap::-webkit-scrollbar-track { background: rgba(0,0,0,0.05); border-radius: 4px; }
+    #view-live .table-wrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+    #view-live .table-wrap::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
+    [data-theme="light"] #view-live .table-wrap::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.2); }
+    [data-theme="light"] #view-live .table-wrap::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.4); }
+
+    .sev-P1 { color: var(--ios-red); font-weight: 700; }
+    .sev-P2 { color: var(--ios-orange); font-weight: 700; }
+    .sev-P3 { color: #eab308; font-weight: 700; }
+    .sev-P4 { color: var(--ios-blue); font-weight: 700; }
+    .status-Down { background: rgba(255,59,48,0.15); color: var(--ios-red); }
+    .status-Acknowledged { background: rgba(255,149,0,0.15); color: var(--ios-orange); }
+    .status-Monitoring { background: rgba(0,122,255,0.15); color: var(--ios-blue); }
+    .timer-box { display: flex; flex-direction: column; gap: 2px; }
+    .timer-main { font-family: monospace; font-size: 0.95rem; font-weight: 600; }
+    .timer-sla { font-size: 0.7rem; font-weight: 600; color: var(--text-sec); }
+    .timer-sla.breached { color: var(--ios-red); animation: pulse 2s infinite; }
+    .timer-sla.warning { color: var(--ios-orange); }
+    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+    /* Notes Column */
+    .note-cell {
+      max-width: 200px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--text-sec);
+      font-size: 0.8rem;
+      cursor: help;
+    }
+    .icon-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-sec);
+      font-size: 0.85em;
+      padding: 2px;
+      border-radius: 4px;
+      transition: 0.15s;
+    }
+    .icon-btn:hover { background: rgba(255,255,255,0.1); color: var(--text-main); }
+
+    .charts-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px; }
+    .chart-full-width { grid-column: 1 / -1; }
+    .chart-box { height: 280px; width: 100%; position: relative; display: flex; justify-content: center; align-items: center; }
+    .chart-box canvas { max-width: 100%; max-height: 100%; }
+    @media (max-width: 1200px) { .charts-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 768px) { .charts-grid { grid-template-columns: 1fr; } }
+    .insight-list { display: flex; flex-direction: column; gap: 12px; }
+    .insight-item { display: flex; gap: 12px; padding: 16px; border-radius: var(--r-md); background: var(--surface-strong); border: 1px solid var(--separator); border-left: 4px solid var(--ios-blue); }
+    .insight-item.critical { border-left-color: var(--ios-red); background: rgba(255,59,48,0.05); }
+    .insight-item.warning { border-left-color: var(--ios-orange); background: rgba(255,149,0,0.05); }
+    .insight-item.success { border-left-color: var(--ios-green); background: rgba(52,199,89,0.05); }
+    .insight-icon { font-size: 1.5rem; }
+    .insight-body h4 { font-size: 0.95rem; margin-bottom: 4px; }
+    .insight-body p { font-size: 0.85rem; color: var(--text-sec); line-height: 1.4; }
+
+    /* Modals */
+    .modal-back { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(5px); display: none; align-items: center; justify-content: center; z-index: 100; }
+    .modal-back.show { display: flex; }
+    .modal { background: var(--surface-strong); border: 1px solid var(--separator); border-radius: var(--r-lg); padding: 24px; width: 100%; max-width: 450px; box-shadow: var(--shadow-modal); animation: modalIn 0.25s ease; }
+    @keyframes modalIn { from { opacity: 0; transform: scale(0.94) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 0.8rem; color: var(--text-sec); margin-bottom: 6px; }
+    .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px; background: rgba(0,0,0,0.1); border: 1px solid var(--separator); border-radius: var(--r-sm); color: var(--text-main); font-family: inherit; }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--ios-blue); }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+
+    /* Professional Login */
+    .login-modal { max-width: 380px; text-align: center; }
+    .login-modal .brand-logo { width: 60px; height: 60px; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: linear-gradient(135deg, #ff3b30, #c1271e); color: white; font-weight: bold; font-size: 1.5rem; box-shadow: 0 8px 24px rgba(255,59,48,0.4); }
+    .login-modal h2 { margin-bottom: 4px; font-size: 1.4rem; }
+    .login-modal .subtitle { color: var(--text-sec); font-size: 0.85rem; margin-bottom: 20px; }
+    .login-modal .form-group { text-align: left; }
+    .login-modal .error-msg { color: var(--ios-red); font-size: 0.82rem; margin-top: 8px; text-align: center; display: none; font-weight: 500; }
+
+    /* CSV Import */
+    .csv-drop-zone { border: 2px dashed var(--separator); border-radius: var(--r-md); padding: 40px 20px; text-align: center; color: var(--text-sec); cursor: pointer; transition: 0.2s; }
+    .csv-drop-zone:hover { border-color: var(--ios-blue); background: rgba(0,122,255,0.05); }
+    .csv-drop-zone input { display: none; }
+    .csv-preview { max-height: 200px; overflow-y: auto; font-size: 0.8rem; border: 1px solid var(--separator); border-radius: var(--r-sm); padding: 8px; margin-top: 12px; display: none; }
+
+    /* Toast */
+    .toast-wrap { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 200; display: flex; flex-direction: column; gap: 8px; }
+    .toast { background: var(--surface-strong); color: var(--text-main); padding: 12px 24px; border-radius: var(--r-pill); font-size: 0.9rem; font-weight: 500; border: 1px solid var(--separator); box-shadow: var(--shadow-modal); opacity: 0; transform: translateY(-20px); transition: 0.3s; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast.error { background: var(--ios-red); color: #fff; border-color: transparent; }
+    .toast.success { background: var(--ios-green); color: #fff; border-color: transparent; }
+
+    @media (max-width: 768px) {
+      .form-row { grid-template-columns: 1fr; }
+      .header { flex-direction: column; gap: 12px; align-items: flex-start; }
+      .header-right { width: 100%; justify-content: space-between; }
+      .toolbar { flex-direction: column; align-items: stretch; }
+    }
+  </style>
+</head>
+<body>
+
+<script>
+  const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw0dKMUo75IJUplrJB6zqphZWahCmgWa0gsINNBouMG87mWybFlwShIXvl7ttLJIreYTQ/exec';
+</script>
+
+<div class="header">
+  <h1>🚨 NOC Live Outages</h1>
+  <div class="header-right">
+    <button class="btn btn-secondary" onclick="toggleFullscreen()" id="fullscreen-btn" title="Toggle fullscreen">⛶ Fullscreen</button>
+    <button class="btn btn-secondary" onclick="toggleTheme()" id="theme-btn">🌙 Dark</button>
+    <div id="auth-area"></div>
+    <button class="btn btn-secondary" id="refresh-btn" onclick="fetchData()">Refresh</button>
+  </div>
+</div>
+
+<div class="container">
+  <div class="toolbar" id="global-toolbar">
+    <div class="input-group">
+      <label>Search</label>
+      <input type="text" id="f-search" placeholder="Site, APM, State, Region..." oninput="applyFilters()">
+    </div>
+    <div class="input-group">
+      <label>Service Filter</label>
+      <select id="f-service-filter" onchange="applyFilters()">
+        <option value="">All Services</option>
+      </select>
+    </div>
+    <div class="input-group">
+      <label>From Date</label>
+      <input type="date" id="f-date-start" onchange="onDateChange()">
+    </div>
+    <div class="input-group">
+      <label>To Date</label>
+      <input type="date" id="f-date-end" onchange="onDateChange()">
+    </div>
+    <button class="btn btn-secondary btn-sm" style="height: 38px; margin-top: 18px;" onclick="clearFilters()">Clear</button>
+  </div>
+
+  <div class="view-tabs">
+    <div class="v-tab active" onclick="switchView('live', this)">Live Board</div>
+    <div class="v-tab" onclick="switchView('insights', this)">Insights</div>
+    <div class="v-tab" onclick="switchView('availability', this)">Network Availability</div>
+    <div class="v-tab" onclick="switchView('history', this)">History</div>
+  </div>
+
+  <!-- LIVE BOARD -->
+  <div class="view-container active" id="view-live">
+    <div class="kpi-grid" id="kpi-area"></div>
+    <div class="card">
+      <div class="card-title">
+        <span>Active Outages</span>
+        <div style="display:flex; gap:6px;">
+          <button class="btn btn-secondary" id="btn-import-csv" onclick="openImportModal()" style="display:none;">📥 Import CSV</button>
+          <button class="btn btn-primary" id="btn-new-outage" onclick="openCreateModal()" style="display:none;">+ Report Outage</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Severity (Auto)</th>
+              <th>Site / Tenant</th>
+              <th>APM / State</th>
+              <th>RCA Category</th> <!-- ✅ Renamed from Service -->
+              <th>Field Team (FT)</th>
+              <th>Status</th>
+              <th>Duration</th>
+              <th>Notes</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="active-tbody">
+            <tr><td colspan="9" style="text-align:center; padding: 40px;">Loading data...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- INSIGHTS -->
+  <div class="view-container" id="view-insights">
+    <div class="charts-grid">
+      <div class="card">
+        <div class="card-title">Severity Mix</div>
+        <div class="chart-box"><canvas id="chartSeverity"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Outages by APM</div>
+        <div class="chart-box"><canvas id="chartAPM"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Outages by Region</div>
+        <div class="chart-box"><canvas id="chartRegion"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Outages by Service</div>
+        <div class="chart-box"><canvas id="chartService"></canvas></div>
+      </div>
+    </div>
+    <div class="charts-grid">
+      <div class="card chart-full-width">
+        <div class="card-title">Daily Outage Trend</div>
+        <div class="chart-box" style="height: 350px;"><canvas id="chartDailyTrend"></canvas></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Operational Insights</div>
+      <div class="insight-list" id="insights-list">
+        <div style="text-align:center; color:var(--text-sec); padding:20px;">Analyzing data...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AVAILABILITY -->
+  <div class="view-container" id="view-availability">
+    <div class="kpi-grid">
+      <div class="kpi" style="border-color: var(--ios-green);">
+        <div class="kpi-label">Overall Availability (Selected Range)</div>
+        <div class="kpi-val" id="avail-overall" style="color: var(--ios-green)">100%</div>
+        <div class="kpi-sub">Calculated across all filtered sites</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Site Availability Matrix</div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Site ID</th>
+              <th>Region</th>
+              <th>APM</th>
+              <th>State</th>
+              <th>Tenant Base</th>
+              <th>Outages</th>
+              <th>Downtime</th>
+              <th>Availability %</th>
+            </tr>
+          </thead>
+          <tbody id="availability-tbody">
+            <tr><td colspan="8" style="text-align:center; padding:40px;">Calculating...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- HISTORY -->
+  <div class="view-container" id="view-history">
+    <div class="card">
+      <div class="card-title">
+        <span>Resolved Outages</span>
+        <span id="history-count" style="color:var(--text-sec); font-size:0.8rem;"></span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Severity</th>
+              <th>Site</th>
+              <th>Service</th>
+              <th>Detected</th>
+              <th>Resolved</th>
+              <th>Duration</th>
+              <th>SLA</th>
+            </tr>
+          </thead>
+          <tbody id="history-tbody">
+            <tr><td colspan="7" style="text-align:center; padding: 40px;">Loading history...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CREATE MODAL -->
+<div class="modal-back" id="modal-create">
+  <div class="modal">
+    <h2 style="margin-bottom:20px;">Report New Outage</h2>
+    <div class="form-group">
+      <label>Site ID *</label>
+      <input type="text" id="f-site" placeholder="e.g. OCK0001" oninput="previewSiteInfo()">
+    </div>
+    <div id="site-preview" style="display:none; background:rgba(0,0,0,0.1); padding:12px; border-radius:8px; margin-bottom:16px; border:1px solid var(--separator);">
+      <div style="font-size:0.75rem; color:var(--text-sec); margin-bottom:4px;">Auto-filled:</div>
+      <div style="display:flex; flex-wrap:wrap; gap:12px; font-size:0.85rem;">
+        <div><strong>Region:</strong> <span id="pv-region"></span></div>
+        <div><strong>APM:</strong> <span id="pv-apm"></span></div>
+        <div><strong>State:</strong> <span id="pv-state"></span></div>
+        <div><strong>FT:</strong> <span id="pv-ft"></span></div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Detected Date</label>
+        <input type="date" id="f-date">
+      </div>
+      <div class="form-group">
+        <label>Detected Time (HHMMSS)</label>
+        <input type="text" id="f-time" placeholder="e.g. 233023" maxlength="8" oninput="formatTimeInput(this)">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>RCA Category *</label>
+      <select id="f-service" onchange="toggleCustomService()">
+        <option value="PC_Failure">DG Failure</option>
+        <option value="No_Power_Issue">No Power Issue</option>
+        <option value="Other">Other</option>
+        <option value="__NEW__" style="font-weight:bold; color:var(--ios-blue);">+ Add New Category...</option>
+      </select>
+      <input type="text" id="f-service-custom" placeholder="Enter new category..." style="display:none; margin-top:8px;">
+    </div>
+    <div class="form-group">
+      <label>Ticket Ref</label>
+      <input type="text" id="f-ticket" placeholder="INC-XXXX">
+    </div>
+    <div class="form-group">
+      <label>Initial Notes</label>
+      <textarea id="f-notes" rows="2" placeholder="Optional details..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('modal-create')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitOutage()">Submit Outage</button>
+    </div>
+  </div>
+</div>
+
+<!-- COMMENT MODAL -->
+<div class="modal-back" id="modal-comment">
+  <div class="modal">
+    <h2 style="margin-bottom:20px;">Add Note to <span id="comment-outage-id"></span></h2>
+    <div class="form-group">
+      <textarea id="f-comment" rows="4" placeholder="Type your update here..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('modal-comment')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitComment()">Save Note</button>
+    </div>
+  </div>
+</div>
+
+<!-- RESOLVE MODAL -->
+<div class="modal-back" id="modal-resolve">
+  <div class="modal">
+    <h2 style="margin-bottom:20px;">Resolve Outage <span id="resolve-outage-id"></span></h2>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Resolved Date</label>
+        <input type="date" id="r-date">
+      </div>
+      <div class="form-group">
+        <label>Resolved Time (HHMMSS)</label>
+        <input type="text" id="r-time" placeholder="e.g. 233023" maxlength="8" oninput="formatTimeInput(this)">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Resolution Notes (optional)</label>
+      <textarea id="r-notes" rows="2" placeholder="e.g. Splice completed, link restored"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('modal-resolve')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmResolve()">Confirm Resolve</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT SERVICE MODAL -->
+<div class="modal-back" id="modal-service">
+  <div class="modal">
+    <h2 style="margin-bottom:20px;">Correct RCA Category</h2>
+    <div class="form-group">
+      <label>New Category</label>
+      <select id="e-service">
+        <option value="PC_Failure">PC_Failure</option>
+        <option value="No_Power">No_Power_Issue</option>
+        <option value="Other">Other</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('modal-service')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmEditService()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT NOTES MODAL -->
+<div class="modal-back" id="modal-notes">
+  <div class="modal">
+    <h2 style="margin-bottom:20px;">Edit Notes</h2>
+    <div class="form-group">
+      <label>Notes</label>
+      <textarea id="e-notes" rows="4" placeholder="Enter updated notes..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('modal-notes')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmEditNotes()">Save Notes</button>
+    </div>
+  </div>
+</div>
+
+<!-- CSV IMPORT MODAL -->
+<div class="modal-back" id="modal-import">
+  <div class="modal">
+    <h2 style="margin-bottom:8px;">Bulk Import Outages</h2>
+    <p style="font-size:0.8rem; color:var(--text-sec); margin-bottom:16px;">
+      CSV Format required: <strong>Site, RCA Category, Detected At (YYYY-MM-DD HH:mm:ss), Ticket Ref, Notes</strong><br>
+      Example: <code style="background:rgba(0,0,0,0.2); padding:2px 6px; border-radius:4px;">OCK0001, No_Power_Issue, 2025-11-10 14:23:00, INC-1234, No_Power_Issue</code>
+    </p>
+    <div class="csv-drop-zone" onclick="document.getElementById('csv-file').click()">
+      <div style="font-size:2rem; margin-bottom:8px;">📄</div>
+      <div style="font-weight:600;">Click to select a CSV file</div>
+      <div style="font-size:0.8rem; margin-top:4px;">or drag and drop</div>
+      <input type="file" id="csv-file" accept=".csv" onchange="handleCsvFile(event)">
+    </div>
+    <div class="csv-preview" id="csv-preview"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('modal-import')">Cancel</button>
+      <button class="btn btn-primary" id="btn-import-submit" onclick="submitCsvImport()" disabled>Import Outages</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOGIN MODAL -->
+<div class="modal-back" id="modal-login">
+  <div class="modal login-modal">
+    <div class="brand-logo">N</div>
+    <h2>Welcome Back</h2>
+    <div class="subtitle">Sign in to the NOC Dashboard</div>
+    <div class="form-group">
+      <label>Email</label>
+      <input type="email" id="login-email" placeholder="admin@noc" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <div class="error-msg" id="login-error"></div>
+    <div class="modal-actions" style="flex-direction:column; gap:8px; margin-top:20px;">
+      <button class="btn btn-primary" style="width:100%; justify-content:center;" id="login-submit-btn" onclick="attemptLogin()">Sign In</button>
+      <button class="btn btn-secondary" style="width:100%; justify-content:center;" onclick="closeModal('modal-login')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<script>
+/* =========================================================
+   STATE & THEME
+   ========================================================= */
+let state = {
+  user: null,
+  outages: [],
+  filtered: [],
+  sites: [],
+  tenants: [],
+  history: [],
+  editingId: null,
+  editingOutage: null,
+  csvRows: [],
+  tickInterval: null,
+  charts: { severity: null, dailyTrend: null, apm: null, region: null, service: null },
+  filters: { search: '', service: '', severity: '', apm: '' },
+  customServices: [],
+  fullscreen: false
+};
+
+try {
+  const savedUser = localStorage.getItem('noc_user');
+  if (savedUser) state.user = JSON.parse(savedUser);
+  const savedTheme = localStorage.getItem('noc_theme') || 'dark';
+  document.documentElement.setAttribute('data-theme', savedTheme);
+  updateThemeButton(savedTheme);
+  
+  const savedServices = localStorage.getItem('noc_custom_services');
+  if (savedServices) state.customServices = JSON.parse(savedServices);
+} catch(e) {}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme');
+  const next = current === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('noc_theme', next);
+  updateThemeButton(next);
+  if (document.getElementById('view-insights').classList.contains('active')) renderCharts();
+}
+
+function updateThemeButton(theme) {
+  const btn = document.getElementById('theme-btn');
+  btn.textContent = theme === 'dark' ? '☀️ Light' : '🌙 Dark';
+}
+
+/* =========================================================
+   FULLSCREEN MODE
+   ========================================================= */
+function toggleFullscreen() {
+  state.fullscreen = !state.fullscreen;
+  document.body.classList.toggle('fullscreen-mode', state.fullscreen);
+  const btn = document.getElementById('fullscreen-btn');
+  btn.textContent = state.fullscreen ? '⛶ Exit Fullscreen' : '⛶ Fullscreen';
+  
+  if (state.fullscreen) {
+    if (document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch(e => {});
+    }
+  } else {
+    if (document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen();
+    }
+  }
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && state.fullscreen) {
+    toggleFullscreen();
+  }
+});
+
+/* =========================================================
+   TOASTS
+   ========================================================= */
+function showToast(msg, type = 'success') {
+  const wrap = document.getElementById('toast-wrap');
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  wrap.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, 3000);
+}
+
+/* =========================================================
+   AUTH
+   ========================================================= */
+function renderAuth() {
+  const el = document.getElementById('auth-area');
+  const btnNew = document.getElementById('btn-new-outage');
+  const btnImport = document.getElementById('btn-import-csv');
+  
+  if (!state.user) {
+    el.innerHTML = `<button class="btn btn-primary" onclick="openLoginModal()">Sign In</button>`;
+    btnNew.style.display = 'none';
+    btnImport.style.display = 'none';
+    return;
+  }
+  
+  const roleColor = state.user.role === 'admin' ? 'var(--ios-red)' : state.user.role === 'noc' ? 'var(--ios-green)' : 'var(--ios-gray)';
+  el.innerHTML = `
+    <span class="badge" style="background:${roleColor}20; color:${roleColor}; border:1px solid ${roleColor}40; margin-right:10px;">
+      ${state.user.role.toUpperCase()} · ${state.user.email}
+    </span>
+    <button class="btn btn-secondary btn-sm" onclick="logout()">Log out</button>
+  `;
+  
+  if (state.user.role === 'admin' || state.user.role === 'noc') {
+    btnNew.style.display = 'inline-flex';
+    btnImport.style.display = 'inline-flex';
+  } else {
+    btnNew.style.display = 'none';
+    btnImport.style.display = 'none';
+  }
+}
+
+function openLoginModal() {
+  document.getElementById('login-email').value = '';
+  document.getElementById('login-password').value = '';
+  document.getElementById('login-error').style.display = 'none';
+  document.getElementById('modal-login').classList.add('show');
+  setTimeout(() => document.getElementById('login-email').focus(), 100);
+}
+
+function attemptLogin() {
+  const email = document.getElementById('login-email').value.trim().toLowerCase();
+  const pass = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  const btn = document.getElementById('login-submit-btn');
+  
+  if (!email || !pass) {
+    errEl.textContent = 'Please enter both email and password';
+    errEl.style.display = 'block';
+    return;
+  }
+  
+  btn.disabled = true; btn.textContent = 'Signing in...';
+  errEl.style.display = 'none';
+  
+  fetch(SCRIPT_URL, {
+    method: 'POST',
+    body: JSON.stringify({ action: 'login', email, password: pass })
+  }).then(r => r.json()).then(res => {
+    if (res.success) {
+      state.user = { email: res.email, role: res.role, pass: pass };
+      localStorage.setItem('noc_user', JSON.stringify(state.user));
+      renderAuth();
+      closeModal('modal-login');
+      showToast('Signed in as ' + res.role, 'success');
+      renderAll();
+    } else {
+      errEl.textContent = 'Invalid email or password';
+      errEl.style.display = 'block';
+    }
+  }).catch(e => {
+    errEl.textContent = 'Connection error. Please try again.';
+    errEl.style.display = 'block';
+  }).finally(() => {
+    btn.disabled = false; btn.textContent = 'Sign In';
+  });
+}
+
+function logout() {
+  state.user = null;
+  localStorage.removeItem('noc_user');
+  renderAuth();
+  renderAll();
+  showToast('Logged out');
+}
+
+document.getElementById('login-password').addEventListener('keypress', function(e) {
+  if (e.key === 'Enter') attemptLogin();
+});
+
+/* =========================================================
+   TIME INPUT FORMATTER
+   ========================================================= */
+function formatTimeInput(el) {
+  let val = el.value.replace(/[^0-9]/g, '');
+  if (val.length >= 2) val = val.slice(0,2) + ':' + val.slice(2);
+  if (val.length >= 5) val = val.slice(0,5) + ':' + val.slice(5);
+  el.value = val.slice(0,8);
+}
+
+function getDateTime(dateId, timeId) {
+  const dateVal = document.getElementById(dateId).value;
+  let timeVal = document.getElementById(timeId).value;
+  
+  if (!timeVal.includes(':')) {
+    let t = timeVal.replace(/[^0-9]/g, '');
+    if (t.length >= 2) t = t.slice(0,2) + ':' + t.slice(2);
+    if (t.length >= 5) t = t.slice(0,5) + ':' + t.slice(5);
+    timeVal = t.slice(0,8);
+  }
+  
+  if (!dateVal || !timeVal) return null;
+  if (timeVal.split(':').length === 2) timeVal += ':00';
+  
+  return `${dateVal} ${timeVal}`;
+}
+
+/* =========================================================
+   DATA FETCHING
+   ========================================================= */
+function fetchData() {
+  fetch(SCRIPT_URL + '?view=active&t=' + Date.now())
+    .then(r => r.json())
+    .then(res => {
+      if (res.success) {
+        state.outages = res.data.map(o => calculateDynamicSeverity(o));
+        applyFilters();
+      }
+    }).catch(e => console.error(e));
+
+  fetch(SCRIPT_URL + '?view=sites&t=' + Date.now())
+    .then(r => r.json())
+    .then(res => { if (res.success) state.sites = res.data; });
+
+  fetch(SCRIPT_URL + '?view=tenants&t=' + Date.now())
+    .then(r => r.json())
+    .then(res => { if (res.success) state.tenants = res.data; });
+
+  onDateChange();
+}
+
+function onDateChange() {
+  const start = document.getElementById('f-date-start').value;
+  const end = document.getElementById('f-date-end').value;
+  if (!start || !end) return;
+
+  fetch(SCRIPT_URL + `?view=history&from=${start}&to=${end}&page=1&pageSize=500&t=` + Date.now())
+    .then(r => r.json())
+    .then(res => {
+      if (res.success) {
+        state.history = res.data.rows.map(o => calculateDynamicSeverity(o));
+        if (document.getElementById('view-history').classList.contains('active')) renderHistory();
+        if (document.getElementById('view-availability').classList.contains('active')) renderAvailability();
+        if (document.getElementById('view-insights').classList.contains('active')) renderInsightsAndCharts();
+      }
+    }).catch(e => console.error(e));
+}
+
+function calculateDynamicSeverity(outage) {
+  const t = state.tenants.find(x => x.Tenant === outage.Tenant);
+  if (!t) return outage;
+
+  const p1Sla = Number(t.P1_SLA) || 30;
+  const p2Sla = Number(t.P2_SLA) || 120;
+  const p3Sla = Number(t.P3_SLA) || 480;
+  
+  const start = new Date(outage['Detected At']).getTime();
+  const end = outage['Resolved At'] ? new Date(outage['Resolved At']).getTime() : Date.now();
+  const elapsedMins = Math.floor((end - start) / 60000);
+
+  let newSev = 'P4';
+  if (elapsedMins > p3Sla) newSev = 'P1';
+  else if (elapsedMins > p2Sla) newSev = 'P2';
+  else if (elapsedMins > p1Sla) newSev = 'P3';
+
+  outage.Severity = newSev;
+  
+  const newSlaMins = newSev === 'P1' ? p1Sla : newSev === 'P2' ? p2Sla : newSev === 'P3' ? p3Sla : (Number(t.P4_SLA) || 1440);
+  outage.SLA_Minutes = newSlaMins;
+  outage.SLA_Remaining_Minutes = newSlaMins - elapsedMins;
+  outage.SLA_Breached = elapsedMins > newSlaMins;
+
+  return outage;
+}
+
+/* =========================================================
+   FILTERING & RENDERING
+   ========================================================= */
+function applyFilters() {
+  state.filters.search = document.getElementById('f-search').value.toLowerCase();
+  state.filters.service = document.getElementById('f-service-filter').value;
+
+  state.filtered = state.outages.filter(o => {
+    if (state.filters.search) {
+      const q = state.filters.search;
+      const matches = 
+        String(o.Site).toLowerCase().includes(q) ||
+        String(o.APM).toLowerCase().includes(q) ||
+        String(o.State).toLowerCase().includes(q) ||
+        String(o.Region).toLowerCase().includes(q);
+      if (!matches) return false;
+    }
+    if (state.filters.service && o.Service !== state.filters.service) return false;
+    if (state.filters.severity && o.Severity !== state.filters.severity) return false;
+    if (state.filters.apm && o.APM !== state.filters.apm) return false;
+    return true;
+  });
+
+  renderAll();
+}
+
+function setCardFilter(type, value) {
+  if (type === 'severity') {
+    state.filters.severity = state.filters.severity === value ? '' : value;
+  } else if (type === 'apm') {
+    state.filters.apm = state.filters.apm === value ? '' : value;
+  }
+  applyFilters();
+}
+
+function clearFilters() {
+  document.getElementById('f-search').value = '';
+  document.getElementById('f-service-filter').value = '';
+  state.filters = { search: '', service: '', severity: '', apm: '' };
+  applyFilters();
+}
+
+function updateServiceFilter() {
+  const sel = document.getElementById('f-service-filter');
+  const currentVal = sel.value;
+  
+  const services = new Set(['PC_Failure', 'No_Power_Issue', 'Other']);
+  state.outages.forEach(o => { if(o.Service) services.add(o.Service); });
+  state.customServices.forEach(s => services.add(s));
+  
+  let html = '<option value="">All Services</option>';
+  Array.from(services).sort().forEach(s => {
+    html += `<option value="${s}">${s}</option>`;
+  });
+  sel.innerHTML = html;
+  
+  if (services.has(currentVal)) sel.value = currentVal;
+}
+
+function renderAll() {
+  renderLiveBoard();
+  updateServiceFilter();
+  if (document.getElementById('view-availability').classList.contains('active')) renderAvailability();
+  if (document.getElementById('view-history').classList.contains('active')) renderHistory();
+  if (document.getElementById('view-insights').classList.contains('active')) renderInsightsAndCharts();
+}
+
+function renderLiveBoard() {
+  const kpiArea = document.getElementById('kpi-area');
+  
+  const total = state.outages.length;
+  const p1 = state.outages.filter(o => o.Severity === 'P1').length;
+  const p2 = state.outages.filter(o => o.Severity === 'P2').length;
+  
+  const apmCounts = {};
+  state.outages.forEach(o => { 
+    const a = o.APM || 'Unknown';
+    apmCounts[a] = (apmCounts[a] || 0) + 1; 
+  });
+  const sortedApms = Object.entries(apmCounts).sort((a,b) => b[1] - a[1]);
+
+  let kpiHtml = `
+    <div class="kpi ${state.filters.severity === '' && state.filters.apm === '' ? 'active-filter' : ''}" onclick="setCardFilter('severity', '')">
+      <div class="kpi-label">Total Active</div>
+      <div class="kpi-val">${total}</div>
+    </div>
+    <div class="kpi ${state.filters.severity === 'P1' ? 'active-filter' : ''}" onclick="setCardFilter('severity', 'P1')">
+      <div class="kpi-label">P1 Critical</div>
+      <div class="kpi-val sev-P1">${p1}</div>
+    </div>
+    <div class="kpi ${state.filters.severity === 'P2' ? 'active-filter' : ''}" onclick="setCardFilter('severity', 'P2')">
+      <div class="kpi-label">P2 Major</div>
+      <div class="kpi-val sev-P2">${p2}</div>
+    </div>
+  `;
+
+  sortedApms.slice(0, 4).forEach(([apmName, count]) => {
+    const isActive = state.filters.apm === apmName;
+    kpiHtml += `
+      <div class="kpi ${isActive ? 'active-filter' : ''}" onclick="setCardFilter('apm', '${apmName}')">
+        <div class="kpi-label">APM: ${apmName}</div>
+        <div class="kpi-val">${count}</div>
+        <div class="kpi-sub">Sites Down</div>
+      </div>
+    `;
+  });
+
+  kpiArea.innerHTML = kpiHtml;
+
+  const tbody = document.getElementById('active-tbody');
+  tbody.innerHTML = '';
+  
+  if (state.filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding: 40px; color:var(--text-sec);">No active outages match the current filters.</td></tr>';
+    return;
+  }
+  
+  const sorted = [...state.filtered].sort((a, b) => {
+    if (a.Severity !== b.Severity) return a.Severity.localeCompare(b.Severity);
+    return new Date(a['Detected At']) - new Date(b['Detected At']);
+  });
+
+  sorted.forEach(o => {
+    const tr = document.createElement('tr');
+    const startMs = new Date(o['Detected At']).getTime();
+    const elapsed = Math.floor((Date.now() - startMs) / 60000);
+    
+    const canEdit = state.user && (state.user.role === 'admin' || state.user.role === 'noc');
+    const actionsHtml = canEdit ? `
+      ${o.Status === 'Down' ? `<button class="btn btn-secondary btn-sm" onclick="ackOutage('${o.ID}')">Ack</button>` : ''}
+      <button class="btn btn-secondary btn-sm" onclick="openCommentModal('${o.ID}')">Note</button>
+      <button class="btn btn-primary btn-sm" onclick="openResolveModal('${o.ID}')">Resolve</button>
+    ` : '';
+
+    const notesText = o.Notes || o['Ticket Ref'] || '-';
+
+    tr.innerHTML = `
+      <td class="sev-${o.Severity}">${o.Severity}</td>
+      <td>
+        <div style="font-weight:600">${o.Site}</div>
+        <div style="font-size:0.7rem; color:var(--text-sec)">${o.Tenant} · ${o.Region}</div>
+      </td>
+      <td>
+        <div>${o.APM || '-'}</div>
+        <div style="font-size:0.7rem; color:var(--text-sec)">${o.State || '-'}</div>
+      </td>
+      <td>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span>${o.Service}</span>
+          ${canEdit ? `<button class="icon-btn" onclick="openEditService('${o.ID}', '${o.Service}')" title="Edit Category">✏️</button>` : ''}
+        </div>
+      </td>
+      <td>${o.FT || '-'}</td>
+      <td><span class="badge status-${o.Status}">${o.Status}</span></td>
+      <td>
+        <div class="timer-box" data-detected="${o['Detected At']}" data-sla="${o.SLA_Minutes || 0}" data-breached="${o.SLA_Breached}">
+          <div class="timer-main">${formatDuration(elapsed)}</div>
+        </div>
+      </td>
+      <td>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <div class="note-cell" title="${escapeHtml(notesText)}">${escapeHtml(notesText)}</div>
+          ${canEdit ? `<button class="icon-btn" onclick="openEditNotes('${o.ID}', '${escapeHtml(o.Notes || '')}')" title="Edit Notes">✏️</button>` : ''}
+        </div>
+      </td>
+      <td><div style="display:flex; gap:6px;">${actionsHtml}</div></td>
+    `;
+    tbody.appendChild(tr);
+  });
+  
+  startTimers();
+}
+
+function startTimers() {
+  if (state.tickInterval) clearInterval(state.tickInterval);
+  state.tickInterval = setInterval(() => {
+    document.querySelectorAll('[data-detected]').forEach(el => {
+      const detected = new Date(el.dataset.detected).getTime();
+      if (isNaN(detected)) return;
+      const now = Date.now();
+      const elapsedMins = Math.floor((now - detected) / 60000);
+      
+      const durEl = el.querySelector('.timer-main');
+      if (durEl) durEl.textContent = formatDuration(elapsedMins);
+    });
+  }, 1000);
+}
+
+function formatDuration(mins) {
+  if (mins < 0) mins = 0;
+  if (mins < 60) return mins + 'm';
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h + 'h ' + m + 'm';
+}
+
+/* =========================================================
+   AVAILABILITY VIEW
+   ========================================================= */
+function renderAvailability() {
+  const tbody = document.getElementById('availability-tbody');
+  const overallEl = document.getElementById('avail-overall');
+  
+  const tenantMap = {};
+  state.tenants.forEach(t => { tenantMap[t.Tenant] = Number(t.P4_SLA) || 1440; });
+
+  const allMonthOutages = new Map();
+  state.outages.forEach(o => allMonthOutages.set(o.ID, o));
+  state.history.forEach(o => allMonthOutages.set(o.ID, o));
+  const monthOutages = Array.from(allMonthOutages.values());
+
+  const siteOutages = {};
+  monthOutages.forEach(o => { 
+    if (!siteOutages[o.Site]) siteOutages[o.Site] = [];
+    siteOutages[o.Site].push(o); 
+  });
+
+  const startVal = document.getElementById('f-date-start').value;
+  const endVal = document.getElementById('f-date-end').value;
+  const now = new Date();
+  const rangeStart = startVal ? new Date(startVal) : new Date(now.getFullYear(), now.getMonth(), 1);
+  const rangeEnd = endVal ? new Date(endVal) : now;
+  
+  const diffTime = Math.abs(rangeEnd - rangeStart);
+  const daysElapsed = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; 
+
+  let totalExpectedMins = 0;
+  let totalDownMins = 0;
+  let html = '';
+
+  const filteredSites = state.sites.filter(site => {
+    if (state.filters.search) {
+      const q = state.filters.search;
+      const matches = 
+        String(site.Site).toLowerCase().includes(q) ||
+        String(site.APM).toLowerCase().includes(q) ||
+        String(site.State).toLowerCase().includes(q) ||
+        String(site.Region).toLowerCase().includes(q);
+      if (!matches) return false;
+    }
+    if (state.filters.apm && site.APM !== state.filters.apm) return false;
+    return true;
+  });
+
+  if (filteredSites.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:40px;">No sites match the current filters.</td></tr>';
+    overallEl.textContent = '100%';
+    overallEl.style.color = 'var(--ios-green)';
+    return;
+  }
+
+  filteredSites.forEach(site => {
+    const siteId = site.Site;
+    const outages = siteOutages[siteId] || [];
+    
+    const filteredOutages = state.filters.service 
+      ? outages.filter(o => o.Service === state.filters.service) 
+      : outages;
+
+    const tenantName = site.Tenant;
+    const dailyBaseMins = tenantMap[tenantName] || 1440; 
+    
+    const expectedMins = dailyBaseMins * daysElapsed;
+
+    let downMins = 0;
+    filteredOutages.forEach(o => {
+      const start = new Date(o['Detected At']).getTime();
+      const end = o['Resolved At'] ? new Date(o['Resolved At']).getTime() : Date.now();
+      let diffMins = Math.floor((end - start) / 60000);
+      if (diffMins < 0) diffMins = 0;
+      downMins += diffMins;
+    });
+
+    if (downMins > expectedMins) downMins = expectedMins;
+    
+    const availMins = expectedMins - downMins;
+    const availPct = ((availMins / expectedMins) * 100).toFixed(2);
+
+    totalExpectedMins += expectedMins;
+    totalDownMins += downMins;
+
+    const color = availPct >= 99.9 ? 'var(--ios-green)' : availPct >= 99 ? 'var(--ios-orange)' : 'var(--ios-red)';
+
+    html += `
+      <tr>
+        <td><strong>${siteId}</strong></td>
+        <td>${site.Region || '-'}</td>
+        <td>${site.APM || '-'}</td>
+        <td>${site.State || '-'}</td>
+        <td>${dailyBaseMins} min/day</td>
+        <td>${filteredOutages.length}</td>
+        <td>${downMins} min</td>
+        <td style="color:${color}; font-weight:bold;">${availPct}%</td>
+      </tr>
+    `;
+  });
+
+  tbody.innerHTML = html;
+
+  const overallAvail = totalExpectedMins > 0 ? (((totalExpectedMins - totalDownMins) / totalExpectedMins) * 100).toFixed(2) : 100;
+  overallEl.textContent = overallAvail + '%';
+  overallEl.style.color = overallAvail >= 99.9 ? 'var(--ios-green)' : overallAvail >= 99 ? 'var(--ios-orange)' : 'var(--ios-red)';
+}
+
+/* =========================================================
+   INSIGHTS & CHARTS
+   ========================================================= */
+function renderInsightsAndCharts() {
+  const insList = document.getElementById('insights-list');
+  const insights = [];
+  
+  const unackedP1s = state.filtered.filter(o => o.Severity === 'P1' && o.Status === 'Down');
+  if (unackedP1s.length > 0) {
+    insights.push({ type: 'critical', icon: '🚨', title: `${unackedP1s.length} P1 Outage(s) Unacknowledged`, desc: 'Critical outages are sitting without an operator response.' });
+  }
+  
+  const breached = state.filtered.filter(o => o.SLA_Breached);
+  if (breached.length > 0) {
+    insights.push({ type: 'critical', icon: '⏰', title: `${breached.length} SLA Breach(es)`, desc: 'Active outages have exceeded their allowed resolution time.' });
+  }
+
+  const siteCounts = {};
+  state.filtered.forEach(o => { siteCounts[o.Site] = (siteCounts[o.Site] || 0) + 1; });
+  const topSite = Object.entries(siteCounts).sort((a,b) => b[1] - a[1])[0];
+  if (topSite && topSite[1] >= 3) {
+    insights.push({ type: 'warning', icon: '📍', title: `Site Concentration: ${topSite[0]}`, desc: `There are ${topSite[1]} active outages at this site. Possible root cause failure.` });
+  }
+
+  if (insights.length === 0) {
+    insights.push({ type: 'success', icon: '✅', title: 'All Clear', desc: 'No immediate actionable insights. Outages are within acceptable limits.' });
+  }
+
+  insList.innerHTML = insights.map(i => `
+    <div class="insight-item ${i.type}">
+      <div class="insight-icon">${i.icon}</div>
+      <div class="insight-body"><h4>${i.title}</h4><p>${i.desc}</p></div>
+    </div>
+  `).join('');
+
+  renderCharts();
+}
+
+function renderCharts() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const textColor = isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.8)';
+  const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+  const f = state.filtered;
+
+  const commonOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { labels: { color: textColor, font: { family: 'sans-serif', size: 12 } } } }
+  };
+
+  // Severity
+  const sevCounts = { P1: 0, P2: 0, P3: 0, P4: 0 };
+  f.forEach(o => { if (sevCounts[o.Severity] !== undefined) sevCounts[o.Severity]++; });
+
+  if (state.charts.severity) state.charts.severity.destroy();
+  state.charts.severity = new Chart(document.getElementById('chartSeverity').getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels: ['P1', 'P2', 'P3', 'P4'],
+      datasets: [{ data: [sevCounts.P1, sevCounts.P2, sevCounts.P3, sevCounts.P4], backgroundColor: ['#ff3b30', '#ff9500', '#eab308', '#007aff'], borderWidth: 0 }]
+    },
+    options: { ...commonOptions, cutout: '65%', plugins: { legend: { position: 'right' } } }
+  });
+
+  // Daily Trend
+  const dailyCounts = {};
+  state.history.forEach(o => {
+    const dateStr = o['Detected At'].split(' ')[0];
+    if (dateStr) dailyCounts[dateStr] = (dailyCounts[dateStr] || 0) + 1;
+  });
+
+  const sortedDates = Object.keys(dailyCounts).sort();
+  const trendData = sortedDates.map(d => dailyCounts[d]);
+  const trendLabels = sortedDates.map(d => {
+    const parts = d.split('-');
+    return new Date(parts[0], parts[1]-1, parts[2]).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  });
+
+  if (state.charts.dailyTrend) state.charts.dailyTrend.destroy();
+  state.charts.dailyTrend = new Chart(document.getElementById('chartDailyTrend').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: trendLabels.length ? trendLabels : ['No Data'],
+      datasets: [{ label: 'Outages Detected', data: trendData.length ? trendData : [0], borderColor: '#ff9500', backgroundColor: 'rgba(255,149,0,0.15)', fill: true, tension: 0.4, pointRadius: 4, pointBackgroundColor: '#ff9500' }]
+    },
+    options: { ...commonOptions, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1, color: textColor }, grid: { color: gridColor } }, x: { ticks: { color: textColor }, grid: { display: false } } } }
+  });
+
+  // APM
+  const apmCounts = {};
+  f.forEach(o => { const a = o.APM || 'Unknown'; apmCounts[a] = (apmCounts[a] || 0) + 1; });
+  const apmLabels = Object.keys(apmCounts);
+
+  if (state.charts.apm) state.charts.apm.destroy();
+  state.charts.apm = new Chart(document.getElementById('chartAPM').getContext('2d'), {
+    type: 'bar',
+    data: { labels: apmLabels.length ? apmLabels : ['No Data'], datasets: [{ label: 'Outages', data: apmLabels.map(l => apmCounts[l]), backgroundColor: 'rgba(0,122,255,0.6)', borderRadius: 6 }] },
+    options: { ...commonOptions, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1, color: textColor }, grid: { color: gridColor } }, x: { ticks: { color: textColor }, grid: { display: false } } } }
+  });
+
+    // Region
+  const regCounts = {};
+  f.forEach(o => { const r = o.Region || 'Unknown'; regCounts[r] = (regCounts[r] || 0) + 1; });
+  const regLabels = Object.keys(regCounts);
+
+  if (state.charts.region) state.charts.region.destroy();
+  state.charts.region = new Chart(document.getElementById('chartRegion').getContext('2d'), {
+    type: 'bar',
+    data: { labels: regLabels.length ? regLabels : ['No Data'], datasets: [{ label: 'Outages', data: regLabels.map(l => regCounts[l]), backgroundColor: 'rgba(139, 92, 246, 0.6)', borderRadius: 6 }] },
+    options: { ...commonOptions, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1, color: textColor }, grid: { color: gridColor } }, x: { ticks: { color: textColor }, grid: { display: false } } } }
+  });
+
+  // Service
+  const svcCounts = {};
+  f.forEach(o => { const s = o.Service || 'Unknown'; svcCounts[s] = (svcCounts[s] || 0) + 1; });
+  const svcLabels = Object.keys(svcCounts);
+
+  if (state.charts.service) state.charts.service.destroy();
+  state.charts.service = new Chart(document.getElementById('chartService').getContext('2d'), {
+    type: 'bar',
+    data: { labels: svcLabels.length ? svcLabels : ['No Data'], datasets: [{ label: 'Outages', data: svcLabels.map(l => svcCounts[l]), backgroundColor: 'rgba(52,199,89,0.6)', borderRadius: 6 }] },
+    options: { ...commonOptions, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1, color: textColor }, grid: { color: gridColor } }, x: { ticks: { color: textColor }, grid: { display: false } } } }
+  });
+}
+
+/* =========================================================
+   HISTORY VIEW
+   ========================================================= */
+function renderHistory() {
+  const tbody = document.getElementById('history-tbody');
+  const countEl = document.getElementById('history-count');
+  
+  const filteredHistory = state.history.filter(o => {
+    if (state.filters.search) {
+      const q = state.filters.search;
+      const matches = 
+        String(o.Site).toLowerCase().includes(q) ||
+        String(o.APM).toLowerCase().includes(q) ||
+        String(o.State).toLowerCase().includes(q) ||
+        String(o.Region).toLowerCase().includes(q);
+      if (!matches) return false;
+    }
+    if (state.filters.service && o.Service !== state.filters.service) return false;
+    if (state.filters.severity && o.Severity !== state.filters.severity) return false;
+    if (state.filters.apm && o.APM !== state.filters.apm) return false;
+    return true;
+  });
+  
+  countEl.textContent = `${filteredHistory.length} resolved outages`;
+  
+  if (filteredHistory.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 40px; color:var(--text-sec);">No resolved outages match the current filters.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filteredHistory.map(o => {
+    const start = new Date(o['Detected At']);
+    const end = new Date(o['Resolved At']);
+    const durMins = Math.round((end - start) / 60000);
+    
+    const slaMet = !o.SLA_Breached;
+    const slaBadge = slaMet 
+      ? '<span class="badge" style="background:rgba(52,199,89,0.15); color:var(--ios-green);">Met</span>'
+      : '<span class="badge" style="background:rgba(255,59,48,0.15); color:var(--ios-red);">Breached</span>';
+
+    return `
+      <tr>
+        <td class="sev-${o.Severity}">${o.Severity}</td>
+        <td><strong>${o.Site}</strong></td>
+        <td>${o.Service}</td>
+        <td>${start.toLocaleString()}</td>
+        <td>${end.toLocaleString()}</td>
+        <td>${formatDuration(durMins)}</td>
+        <td>${slaBadge}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+/* =========================================================
+   NAVIGATION
+   ========================================================= */
+function switchView(viewId, el) {
+  document.querySelectorAll('.v-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  
+  document.querySelectorAll('.view-container').forEach(c => c.classList.remove('active'));
+  document.getElementById('view-' + viewId).classList.add('active');
+
+  if (viewId === 'insights') renderInsightsAndCharts();
+  if (viewId === 'availability') renderAvailability();
+  if (viewId === 'history') renderHistory();
+}
+
+/* =========================================================
+   SITE PREVIEW
+   ========================================================= */
+function previewSiteInfo() {
+  const siteId = document.getElementById('f-site').value.trim().toUpperCase();
+  const previewBox = document.getElementById('site-preview');
+  
+  const site = state.sites.find(s => String(s.Site).trim().toUpperCase() === siteId);
+  
+  if (site) {
+    document.getElementById('pv-region').textContent = site.Region || '-';
+    document.getElementById('pv-apm').textContent = site.APM || '-';
+    document.getElementById('pv-state').textContent = site.State || '-';
+    document.getElementById('pv-ft').textContent = site.FT || '-';
+    previewBox.style.display = 'block';
+  } else {
+    previewBox.style.display = 'none';
+  }
+}
+
+function toggleCustomService() {
+  const sel = document.getElementById('f-service');
+  const customInput = document.getElementById('f-service-custom');
+  if (sel.value === '__NEW__') {
+    customInput.style.display = 'block';
+    customInput.focus();
+  } else {
+    customInput.style.display = 'none';
+  }
+}
+
+/* =========================================================
+   CREATE OUTAGE
+   ========================================================= */
+function openCreateModal() {
+  if (!state.user) return showToast('Login required', 'error');
+  document.getElementById('f-site').value = '';
+  document.getElementById('f-service').value = 'PC_Failure';
+  document.getElementById('f-ticket').value = '';
+  document.getElementById('f-notes').value = '';
+  document.getElementById('f-service-custom').style.display = 'none';
+  document.getElementById('site-preview').style.display = 'none';
+  
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const ss = String(now.getSeconds()).padStart(2, '0');
+  
+  document.getElementById('f-date').value = `${y}-${m}-${d}`;
+  document.getElementById('f-time').value = `${hh}:${mm}:${ss}`;
+
+  const sel = document.getElementById('f-service');
+  sel.innerHTML = `
+    <option value="PC_Failure">PC_Failure</option>
+    <option value="No_Power_Issue">No_Power_Issue</option>
+    <option value="Other">Other</option>
+  `;
+  state.customServices.forEach(s => {
+    sel.innerHTML += `<option value="${s}">${s}</option>`;
+  });
+  sel.innerHTML += `<option value="__NEW__" style="font-weight:bold; color:var(--ios-blue);">+ Add New Category...</option>`;
+
+  document.getElementById('modal-create').classList.add('show');
+}
+
+function submitOutage() {
+  const detectedAt = getDateTime('f-date', 'f-time');
+  if (!detectedAt) return showToast('Date and Time are required', 'error');
+
+  let serviceVal = document.getElementById('f-service').value;
+  if (serviceVal === '__NEW__') {
+    const customVal = document.getElementById('f-service-custom').value.trim();
+    if (!customVal) return showToast('Please enter the new category name', 'error');
+    serviceVal = customVal;
+    
+    if (!state.customServices.includes(serviceVal)) {
+      state.customServices.push(serviceVal);
+      localStorage.setItem('noc_custom_services', JSON.stringify(state.customServices));
+    }
+  }
+
+  const data = {
+    Site: document.getElementById('f-site').value.trim(),
+    Service: serviceVal,
+    'Ticket Ref': document.getElementById('f-ticket').value.trim(),
+    Notes: document.getElementById('f-notes').value.trim(),
+    'Detected At': detectedAt
+  };
+
+  if (!data.Site) return showToast('Site ID is required', 'error');
+
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = 'Submitting...';
+
+  postAction('create', data)
+    .then(res => {
+      showToast('Outage reported successfully');
+      closeModal('modal-create');
+      fetchData();
+    })
+    .catch(err => showToast(err.message, 'error'))
+    .finally(() => {
+      btn.disabled = false; btn.textContent = 'Submit Outage';
+    });
+}
+
+/* =========================================================
+   RESOLVE MODAL
+   ========================================================= */
+function openResolveModal(id) {
+  state.editingId = id;
+  document.getElementById('resolve-outage-id').textContent = id;
+  document.getElementById('r-notes').value = '';
+  
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const ss = String(now.getSeconds()).padStart(2, '0');
+  
+  document.getElementById('r-date').value = `${y}-${m}-${d}`;
+  document.getElementById('r-time').value = `${hh}:${mm}:${ss}`;
+  
+  document.getElementById('modal-resolve').classList.add('show');
+}
+
+function confirmResolve() {
+  const resolvedAt = getDateTime('r-date', 'r-time');
+  if (!resolvedAt) return showToast('Resolution date and time are required', 'error');
+  
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = 'Resolving...';
+
+  postAction('resolve', { 
+    id: state.editingId, 
+    'Resolved At': resolvedAt,
+    Notes: document.getElementById('r-notes').value.trim()
+  })
+    .then(() => {
+      showToast('Outage resolved');
+      closeModal('modal-resolve');
+      fetchData();
+    })
+    .catch(err => showToast(err.message, 'error'))
+    .finally(() => {
+      btn.disabled = false; btn.textContent = 'Confirm Resolve';
+    });
+}
+
+/* =========================================================
+   EDIT SERVICE MODAL
+   ========================================================= */
+function openEditService(id, currentService) {
+  state.editingId = id;
+  document.getElementById('e-service').value = currentService;
+  document.getElementById('modal-service').classList.add('show');
+}
+
+function confirmEditService() {
+  const newService = document.getElementById('e-service').value;
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = 'Saving...';
+
+  postAction('updateService', { id: state.editingId, Service: newService })
+    .then(() => {
+      showToast('Category updated');
+      closeModal('modal-service');
+      fetchData();
+    })
+    .catch(err => {
+      showToast(err.message, 'error');
+      btn.disabled = false; btn.textContent = 'Save';
+    });
+}
+
+/* =========================================================
+   EDIT NOTES MODAL ✅ NEW
+   ========================================================= */
+function openEditNotes(id, currentNotes) {
+  state.editingId = id;
+  document.getElementById('e-notes').value = currentNotes || '';
+  document.getElementById('modal-notes').classList.add('show');
+}
+
+function confirmEditNotes() {
+  const newNotes = document.getElementById('e-notes').value.trim();
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = 'Saving...';
+
+  postAction('updateNotes', { id: state.editingId, Notes: newNotes })
+    .then(() => {
+      showToast('Notes updated');
+      closeModal('modal-notes');
+      fetchData();
+    })
+    .catch(err => {
+      showToast(err.message, 'error');
+      btn.disabled = false; btn.textContent = 'Save Notes';
+    });
+}
+
+/* =========================================================
+   CSV IMPORT
+   ========================================================= */
+async function openImportModal() {
+  if (!state.user) return showToast('Login required', 'error');
+  
+  // ✅ Fetch fresh data before opening the modal
+  try {
+    const res = await fetch(SCRIPT_URL + '?view=active&t=' + Date.now()).then(r => r.json());
+    if (res.success) {
+      state.outages = res.data.map(o => calculateDynamicSeverity(o));
+    }
+  } catch (e) {
+    console.warn('Could not refresh before import, using cached data');
+  }
+  
+  state.csvRows = [];
+  document.getElementById('csv-preview').style.display = 'none';
+  document.getElementById('csv-preview').innerHTML = '';
+  document.getElementById('csv-file').value = '';
+  document.getElementById('btn-import-submit').disabled = true;
+  document.getElementById('btn-import-submit').textContent = 'Import Outages';
+  document.getElementById('modal-import').classList.add('show');
+}
+
+function handleCsvFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    parseCsv(e.target.result);
+  };
+  reader.readAsText(file);
+}
+
+function parseCsv(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) return showToast('CSV is empty or missing data', 'error');
+  
+  const newRows = [];
+  const duplicates = [];
+  const errors = [];
+  
+  // Helper: build a unique key for deduplication
+  function buildKey(site, service, detected, ticket) {
+    const t = String(ticket || '').trim().toLowerCase();
+    if (t) {
+      // Primary: Ticket Ref (most reliable)
+      return `ticket:${t}`;
+    }
+    // Fallback: Site + Service + Minute
+    const timeKey = String(detected || '').trim().slice(0, 16); // YYYY-MM-DD HH:mm
+    return `fallback:${String(site).trim().toLowerCase()}|${String(service).trim().toLowerCase()}|${timeKey}`;
+  }
+  
+  // Build existing keys from active outages
+  const existingKeys = new Set(
+    state.outages.map(o => buildKey(o.Site, o.Service, o['Detected At'], o['Ticket Ref']))
+  );
+  const csvKeys = new Set();
+  
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(',').map(c => c.trim());
+    if (cols.length < 3) { errors.push(`Row ${i+1}: Not enough columns`); continue; }
+    
+    const [site, service, detected, ticket, notes] = cols;
+    if (!site) { errors.push(`Row ${i+1}: Missing Site`); continue; }
+    if (!service) { errors.push(`Row ${i+1}: Missing Category`); continue; }
+    if (!detected) { errors.push(`Row ${i+1}: Missing Detected Time`); continue; }
+    
+    const key = buildKey(site, service, detected, ticket);
+    
+    if (existingKeys.has(key)) {
+      duplicates.push({ row: i+1, site, service, reason: `Already active (${ticket ? 'ticket ' + ticket : 'site+time match'})` });
+      continue;
+    }
+    if (csvKeys.has(key)) {
+      duplicates.push({ row: i+1, site, service, reason: 'Duplicate in CSV' });
+      continue;
+    }
+    
+    csvKeys.add(key);
+    newRows.push({
+      Site: site, Service: service, 'Detected At': detected,
+      'Ticket Ref': ticket || '', Notes: notes || ''
+    });
+  }
+  
+  state.csvRows = newRows;
+  
+  const previewEl = document.getElementById('csv-preview');
+  const submitBtn = document.getElementById('btn-import-submit');
+  
+  previewEl.style.display = 'block';
+  previewEl.innerHTML = `
+    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; margin-bottom:12px;">
+      <div style="background:rgba(52,199,89,0.1); padding:8px; border-radius:6px; text-align:center;">
+        <div style="font-size:0.7rem; color:var(--text-sec);">NEW</div>
+        <div style="font-size:1.3rem; font-weight:700; color:var(--ios-green);">${newRows.length}</div>
+      </div>
+      <div style="background:rgba(255,149,0,0.1); padding:8px; border-radius:6px; text-align:center;">
+        <div style="font-size:0.7rem; color:var(--text-sec);">DUPLICATES</div>
+        <div style="font-size:1.3rem; font-weight:700; color:var(--ios-orange);">${duplicates.length}</div>
+      </div>
+      <div style="background:rgba(255,59,48,0.1); padding:8px; border-radius:6px; text-align:center;">
+        <div style="font-size:0.7rem; color:var(--text-sec);">INVALID</div>
+        <div style="font-size:1.3rem; font-weight:700; color:var(--ios-red);">${errors.length}</div>
+      </div>
+    </div>
+    ${newRows.length > 0 ? `
+      <div style="font-size:0.75rem; font-weight:600; margin-bottom:4px;">Will Import:</div>
+      <table style="width:100%; font-size:0.7rem; margin-bottom:8px;">
+        <thead><tr style="border-bottom:1px solid var(--separator);">
+          <th style="text-align:left; padding:3px;">Site</th>
+          <th style="text-align:left; padding:3px;">Category</th>
+          <th style="text-align:left; padding:3px;">Ticket</th>
+        </tr></thead>
+        <tbody>
+          ${newRows.slice(0, 5).map(r => `
+            <tr>
+              <td style="padding:3px;">${escapeHtml(r.Site)}</td>
+              <td style="padding:3px;">${escapeHtml(r.Service)}</td>
+              <td style="padding:3px;">${escapeHtml(r['Ticket Ref'] || '—')}</td>
+            </tr>
+          `).join('')}
+          ${newRows.length > 5 ? `<tr><td colspan="3" style="text-align:center; padding:3px; color:var(--text-sec);">... and ${newRows.length - 5} more</td></tr>` : ''}
+        </tbody>
+      </table>
+    ` : ''}
+    ${duplicates.length > 0 ? `
+      <div style="font-size:0.75rem; font-weight:600; color:var(--ios-orange); margin-bottom:4px;">Duplicates (will skip):</div>
+      <div style="font-size:0.7rem; color:var(--ios-orange); max-height:80px; overflow-y:auto;">
+        ${duplicates.slice(0, 5).map(d => `Row ${d.row}: ${escapeHtml(d.site)} / ${escapeHtml(d.service)} — ${d.reason}`).join('<br>')}
+        ${duplicates.length > 5 ? `<br>... and ${duplicates.length - 5} more` : ''}
+      </div>
+    ` : ''}
+  `;
+  
+  if (newRows.length === 0) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'No New Outages';
+  } else {
+    submitBtn.disabled = false;
+    submitBtn.textContent = `Import ${newRows.length} New Outages`;
+  }
+}
+
+function submitCsvImport() {
+  if (state.csvRows.length === 0) return;
+  
+  const total = state.csvRows.length;
+  const btn = document.getElementById('btn-import-submit');
+  btn.disabled = true;
+  
+  let successCount = 0;
+  let errorCount = 0;
+  let processed = 0;
+  
+  async function processNext() {
+    if (processed >= total) {
+      showToast(`✅ Imported ${successCount}${errorCount > 0 ? `, ${errorCount} failed` : ''}`, successCount > 0 ? 'success' : 'error');
+      closeModal('modal-import');
+      
+      // ✅ Force a fresh fetch and WAIT for it to complete
+      try {
+        const res = await fetch(SCRIPT_URL + '?view=active&t=' + Date.now()).then(r => r.json());
+        if (res.success) {
+          state.outages = res.data.map(o => calculateDynamicSeverity(o));
+          applyFilters();
+        }
+      } catch (e) {
+        console.warn('Post-import refresh failed:', e);
+      }
+      
+      return;
+    }
+    
+    const row = state.csvRows[processed];
+    processed++;
+    btn.textContent = `Importing ${processed}/${total}...`;
+    
+    try {
+      await postAction('create', row);
+      successCount++;
+    } catch (e) {
+      errorCount++;
+      console.error('Row failed:', row, e.message);
+    }
+    
+    setTimeout(processNext, 100);
+  }
+  
+  processNext();
+}
+
+/* =========================================================
+   ACK & COMMENT
+   ========================================================= */
+function ackOutage(id) {
+  postAction('acknowledge', { id })
+    .then(() => { showToast('Outage Acknowledged'); fetchData(); })
+    .catch(err => showToast(err.message, 'error'));
+}
+
+function openCommentModal(id) {
+  state.editingId = id;
+  document.getElementById('comment-outage-id').textContent = id;
+  document.getElementById('f-comment').value = '';
+  document.getElementById('modal-comment').classList.add('show');
+}
+
+function submitComment() {
+  const text = document.getElementById('f-comment').value.trim();
+  if (!text) return showToast('Note cannot be empty', 'error');
+
+  postAction('comment', { id: state.editingId, text })
+    .then(() => {
+      showToast('Note added');
+      closeModal('modal-comment');
+    })
+    .catch(err => showToast(err.message, 'error'));
+}
+
+/* =========================================================
+   UTILITIES
+   ========================================================= */
+function escapeHtml(str) {
+  return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('show');
+  state.editingId = null;
+}
+
+function postAction(action, data) {
+  if (!state.user) return Promise.reject(new Error('Please login first'));
+  return fetch(SCRIPT_URL, {
+    method: 'POST',
+    body: JSON.stringify({
+      action: action,
+      email: state.user.email,
+      password: state.user.pass,
+      data: data
+    })
+  }).then(r => r.json()).then(res => {
+    if (!res.success) throw new Error(res.error || 'Action failed');
+    return res;
+  });
+}
+
+/* =========================================================
+   INITIALIZATION
+   ========================================================= */
+(function init() {
+  const today = new Date();
+  const lastMonth = new Date();
+  lastMonth.setMonth(today.getMonth() - 1);
+  
+  const fmt = d => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+  
+  document.getElementById('f-date-start').value = fmt(lastMonth);
+  document.getElementById('f-date-end').value = fmt(today);
+
+  renderAuth();
+  fetchData();
+  
+  setInterval(() => {
+    fetchData();
+  }, 60000);
+})();
+</script>
+</body>
+</html>
